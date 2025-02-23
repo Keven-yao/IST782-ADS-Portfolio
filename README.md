@@ -1,8 +1,8 @@
 # IST782-ADS-Portfolio
 
-### Student Name: Yunkai Yao
-### SUID: 775393618
-### Email: yyao48@syr.edu
+#### Student Name: Yunkai Yao
+#### SUID: 775393618
+#### Email: yyao48@syr.edu
 
 Project repository for IST782
 
