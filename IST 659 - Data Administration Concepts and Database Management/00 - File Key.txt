@@ -1,0 +1,11 @@
+1 - A one-to-two-page document that includes what your project does, why you selected it, and the business problem it will address or resolve.
+2 - Data analysis of the facts listing entities, attributes, and relationships in the data model.
+3 - Conceptual Data Model Diagram
+4 - Logical Data Model Diagram
+5 - Basic layout of all application screens. This means you need to think about data input, how, by whom, etc.
+6 - Diagram of each screen used in the application.
+7 - SQL Up/Down script to implement the internal model with initial data.
+8 - SQL Up/Down Script to load / migrate in existing data.
+9 - A working implementation of the application (can be used during demonstration).
+10 - A team log recording individual and group contributions to the project including when and by whom.
+11 - A slide deck of your presentation. Presentation will occur on the last day of class. Allow for 10-15 minutes.

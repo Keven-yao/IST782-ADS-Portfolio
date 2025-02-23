@@ -1,0 +1,146 @@
+---
+title: "Untitled"
+output: html_document
+date: "2024-04-24"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+Bike <- read.csv("/Users/yaoyunkai/Desktop/IST 686/Final Exam 2024/Bike1.csv")
+set.seed(3618) #last 4 digits of SUID
+myData<-Bike[sample(1:nrow(Bike), 250, replace=FALSE),]
+View(myData)
+
+missing_data <- sapply(myData, function(x) sum(is.na(x)))
+if(any(missing_data > 0)){
+  myData <- na.omit(myData)
+}
+
+sum(is.na(myData))
+```
+
+```{r}
+str(myData)
+```
+
+```{r}
+summary(myData)
+```
+###2
+```{r}
+library(readr)
+cross_tab <- table(myData$Education, myData$Occupation)
+chi_squared_test <- chisq.test(cross_tab)
+print(chi_squared_test)
+```
+
+```{r}
+if(chi_squared_test$p.value < 0.05) {
+    print(cross_tab)
+  }
+```
+
+```{r}
+aovOut=aov(Education~Occupation,data=myData)
+summary(aovOut)
+```
+
+```{r}
+library(dplyr)
+library(stats)
+library(base)
+Bike <- mutate(Education,Occupation)
+```
+
+```{r}
+
+```
+
+
+
+
+
+
+###3
+```{r}
+glmOut <- glm(formula = Marital.Status ~  Cars + Income, family = binomial(link="logit"), data = myData)
+summary(glmOut)
+```
+
+```{r}
+exp(coef(glmOut))
+exp(confint(glmOut))
+```
+
+```{r}
+anova(glmOut, test = "Chisq")
+```
+
+```{r}
+table(round(predict(glmOut,type ="response")),myData$Marital.Status)
+```
+
+```{r}
+library(MCMCpack)
+library(MASS)
+library(BayesFactor)
+library(coda)
+bayesLogitOut <- MCMClogit(formula = Marital.Status ~  Cars + Income, data = myData)
+summary(bayesLogitOut)
+```
+
+```{r}
+plot(bayesLogitOut)
+```
+
+```{r}
+recLogOdds <- as.matrix(bayesLogitOut[,"Income"])
+recOdds <- apply(recLogOdds,1,exp)
+
+hist(recOdds, main="Posterior Distribution of Plain Odds for Income")
+abline(v=quantile(recOdds,c(0.025)),col="blue")
+abline(v=quantile(recOdds,c(0.975)),col="blue")
+```
+
+```{r}
+mean(recOdds)
+quantile(recOdds,c(0.025))
+quantile(recOdds,c(0.975))
+```
+
+```{r}
+recLogOdds <- as.matrix(bayesLogitOut[,"Cars"])
+recOdds <- apply(recLogOdds,1,exp)
+
+hist(recOdds, main="Posterior Distribution of Plain Odds for Cars")
+abline(v=quantile(recOdds,c(0.025)),col="blue")
+abline(v=quantile(recOdds,c(0.975)),col="blue")
+```
+
+```{r}
+mean(recOdds)
+quantile(recOdds,c(0.025))
+quantile(recOdds,c(0.975))
+```
+
+
+
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

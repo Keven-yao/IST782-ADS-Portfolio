@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Preview Extracted Words</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+            border-radius: 12px;
+            background-color: #fff;
+            box-shadow: 0px 0px 20px rgba(0, 0, 0, 0.1);
+        }
+        h1, h2 {
+            color: #333;
+        }
+        .preview {
+            margin-top: 20px;
+        }
+        .preview h2 {
+            margin-bottom: 10px;
+        }
+        .preview ul {
+            list-style-type: none;
+            padding: 0;
+        }
+        .preview ul li {
+            margin-bottom: 5px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            background-color: #f0f0f0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Preview Extracted Words</h1>
+        <div class="preview">
+            {% if en_paragraphs %}
+            <h2>Extracted English Words</h2>
+            <ul>
+                {% for paragraph in en_paragraphs %}
+                <li>{{ paragraph }}</li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+
+            {% if zh_paragraphs %}
+            <h2>Extracted Chinese Words</h2>
+            <ul>
+                {% for paragraph in zh_paragraphs %}
+                <li>{{ paragraph }}</li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+        </div>
+        <a href="/download_en"><button>Download English Words</button></a>
+        <a href="/download_zh"><button>Download Chinese Words</button></a>
+    </div>
+</body>
+</html>

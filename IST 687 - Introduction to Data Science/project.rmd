@@ -1,0 +1,368 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
+```{r}
+
+library(arrow)
+library(caret)
+library(dplyr)
+library(forecast)
+library(ggmap)
+library(ggplot2)
+library(glue)
+library(imputeTS)
+library(jsonlite)
+library(lubridate)
+library(quanteda)
+library(quanteda.textplots)
+library(quanteda.textstats)
+library(RCurl)
+library(readr)
+library(rmarkdown)
+library(shiny)
+library(tidyverse)
+library(data.table)
+library(janitor)
+library(readxl)
+library(writexl)
+library(corrplot)
+```
+
+
+```{r}
+data <- read_csv("/Users/surabhiarchitha/Downloads/Data_Cleaned.csv")
+```
+
+```{r}
+#basic stats
+str(data)
+summary(data)
+head(data)
+```
+
+```{r}
+# Inspect the dataset structure
+glimpse(data)
+str(data)
+```
+
+```{r}
+# Descriptive Analysis
+# Summary of numerical variables
+summary(select_if(data, is.numeric))
+```
+
+```{r}
+# Count unique values and inspect categorical variables
+sapply(select_if(data, is.character), function(x) length(unique(x)))
+```
+
+```{r}
+# Check for missing values
+missing_values <- colSums(is.na(data))
+missing_values <- missing_values[missing_values > 0]
+print(missing_values)
+```
+```{r}
+# Handle missing values
+# Drop columns with high missing values
+columns_to_drop <- c(
+  "upgrade.insulation_roof",
+  "upgrade.geometry_foundation_type",
+  "upgrade.insulation_wall",
+  "upgrade.insulation_foundation_wall"
+)
+data <- data %>% select(-all_of(columns_to_drop))
+```
+
+```{r}
+# Impute missing values for numerical columns with median
+numeric_cols <- names(data)[sapply(data, is.numeric)]
+for (col in numeric_cols) {
+  if (sum(is.na(data[[col]])) > 0) {
+    data[[col]][is.na(data[[col]])] <- median(data[[col]], na.rm = TRUE)
+  }
+}
+```
+
+```{r}
+# Impute missing values for categorical columns with mode
+categorical_cols <- names(data)[sapply(data, is.character)]
+for (col in categorical_cols) {
+  if (sum(is.na(data[[col]])) > 0) {
+    mode_value <- as.character(data[[col]]) %>%
+      na.omit() %>%
+      table() %>%
+      which.max() %>%
+      names()
+    data[[col]][is.na(data[[col]])] <- mode_value
+  }
+}
+```
+
+```{r}
+# Verify that all missing values are handled
+print("Remaining missing values:")
+print(colSums(is.na(data)))
+```
+
+
+```{r}
+# Calculate Total Energy Usage
+energy_columns <- grep("energy_consumption", names(data), value = TRUE)
+data <- data %>%
+  mutate(Total_Energy_Usage = rowSums(select(., all_of(energy_columns)), na.rm = TRUE))
+#Combining multiple energy consumption columns into a single Total_Energy_Usage column by summing relevant variables.
+```
+
+```{r}
+# Handle outliers
+data <- data %>%
+  filter(Total_Energy_Usage > 0)  # Remove negative or zero values
+```
+
+
+```{r}
+# Energy Usage Analysis
+# Plot distribution of Total Energy Usage
+ggplot(data, aes(x = Total_Energy_Usage)) + 
+  geom_histogram(bins = 30, fill = "blue", color = "white") +
+  labs(title = "Total Energy Usage Distribution", x = "Total Energy Usage", y = "Count")
+#right skewed, most houses consume energy within 200-400units range.The skewness could indicate that a smaller subset of households disproportionately impacts total energy demand during hot months. 
+```
+
+```{r}
+# Weather Impact Analysis
+# Remove variables with zero standard deviation
+num_data <- select_if(data, is.numeric) %>%
+  select_if(~ sd(.x, na.rm = TRUE) > 0)
+
+# Compute correlation matrix
+cor_matrix <- cor(num_data, use = "complete.obs")
+
+# Convert correlation matrix to a long format
+cor_melted <- as.data.frame(as.table(cor_matrix))
+
+# Plot heatmap with ggplot2
+ggplot(cor_melted, aes(Var1, Var2, fill = Freq)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       midpoint = 0, limit = c(-1, 1), space = "Lab",
+                       name = "Correlation") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+        axis.text.y = element_text(size = 8)) +
+  labs(title = "Correlation Heatmap", x = "Variables", y = "Variables")
+#Weather variables are likely correlated with total energy usage. 
+```
+
+```{r}
+# Scatter plot for temperature vs Total Energy Usage
+ggplot(data, aes(x = `Dry Bulb Temperature [°C]`, y = Total_Energy_Usage)) +
+  geom_point(alpha = 0.5) +
+  labs(title = "Temperature vs Total Energy Usage", x = "Temperature (°C)", y = "Total Energy Usage")
+#As temperature increases, total energy usage tends to rise. At higher temperatures (above 27°C), there is a wider range of energy usage, with some houses consuming very high amounts of energy, while others remain moderate or low.
+```
+
+```{r}
+# House Characteristics Analysis
+# Total Energy Usage by house size
+ggplot(data, aes(x = `in.sqft`, y = Total_Energy_Usage)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", color = "red") +
+  labs(title = "House Size vs Total Energy Usage", x = "House Size (sqft)", y = "Total Energy Usage")
+#The red regression line shows a positive relationship between house size and total energy usage.
+```
+
+```{r}
+# Boxplot of Total Energy Usage by region
+ggplot(data, aes(x = `in.ahs_region`, y = Total_Energy_Usage)) +
+  geom_boxplot(fill = "orange", color = "black") +
+  labs(title = "Total Energy Usage by Region", x = "Region", y = "Total Energy Usage")
+#Most houses in this region have total energy usage concentrated around the median, likely below 500 units.
+```
+```{r}
+# Group temperature into bins and calculate mean energy usage
+data %>%
+  mutate(temp_bin = cut(`Dry Bulb Temperature [°C]`, breaks = seq(20, 35, 5))) %>%
+  group_by(temp_bin) %>%
+  summarize(mean_energy_usage = mean(Total_Energy_Usage, na.rm = TRUE)) %>%
+  ggplot(aes(x = temp_bin, y = mean_energy_usage, fill = temp_bin)) +
+  geom_col() +
+  labs(title = "Average Energy Usage by Temperature Range",
+       x = "Temperature Range (°C)", y = "Average Energy Usage") +
+  theme_minimal()
+```
+
+```{r}
+colnames(data)
+```
+
+```{r}
+colnames(data)[colnames(data) == "Dry Bulb Temperature [°C]"] <- "Dry_Bulb_Temperature"
+```
+
+
+```{r}
+library(randomForest)
+selected_vars <- c("Total_Energy_Usage", 
+                   "out.electricity.cooling.energy_consumption", 
+                   "out.electricity.cooling_fans_pumps.energy_consumption", 
+                   "out.electricity.plug_loads.energy_consumption", 
+                   "out.electricity.lighting_interior.energy_consumption", 
+                   "out.electricity.hot_water.energy_consumption", 
+                   "in.sqft", 
+                   "Dry_Bulb_Temperature")  # Adjust based on dataset formatting
+
+# Check if columns exist in the dataset
+selected_vars <- selected_vars[selected_vars %in% colnames(data)]
+
+data_selected <- data[, selected_vars]
+
+# Split data into train and test sets
+set.seed(123)
+trainIndex <- createDataPartition(data_selected$Total_Energy_Usage, p = 0.8, 
+                                  list = FALSE, 
+                                  times = 1)
+data_train <- data_selected[trainIndex, ]
+data_test <- data_selected[-trainIndex, ]
+
+# Linear Regression Model
+linear_model <- lm(Total_Energy_Usage ~ ., data = data_train)
+summary(linear_model)
+
+# Predictions and RMSE for Linear Regression
+predictions_lm <- predict(linear_model, data_test)
+rmse_lm <- sqrt(mean((predictions_lm - data_test$Total_Energy_Usage)^2))
+print(paste("Linear Regression RMSE:", rmse_lm))
+
+# Actual values from the test set
+actual_values <- data_test$Total_Energy_Usage
+
+
+ss_total <- sum((actual_values - mean(actual_values))^2)  # Total Sum of Squares
+ss_residual_lm <- sum((actual_values - predictions_lm)^2) # Residual Sum of Squares
+r_squared_lm <- 1 - (ss_residual_lm / ss_total)
+print(paste("R-squared for Linear Regression:", r_squared_lm))
+
+
+# Random Forest Model
+rf_model <- randomForest(Total_Energy_Usage ~ ., data = data_train, ntree = 100)
+predictions_rf <- predict(rf_model, data_test)
+rmse_rf <- sqrt(mean((predictions_rf - data_test$Total_Energy_Usage)^2))
+print(paste("Random Forest RMSE:", rmse_rf))
+
+# R-squared for Random Forest
+ss_residual_rf <- sum((actual_values - predictions_rf)^2) # Residual Sum of Squares
+r_squared_rf <- 1 - (ss_residual_rf / ss_total)
+print(paste("R-squared for Random Forest:", r_squared_rf))
+
+# Compare Models
+model_comparison <- data.frame(
+  Model = c("Linear Regression", "Random Forest"),
+  RMSE = c(rmse_lm, rmse_rf)
+)
+
+print(model_comparison)
+
+# Save the best model
+saveRDS(linear_model, file = "best_model_lm.rds")
+```
+
+```{r}
+library(rpart)
+library(rpart.plot)
+selected_vars <- c("Total_Energy_Usage", 
+                   "out.electricity.cooling.energy_consumption", 
+                   "out.electricity.cooling_fans_pumps.energy_consumption", 
+                   "out.electricity.plug_loads.energy_consumption", 
+                   "out.electricity.lighting_interior.energy_consumption", 
+                   "out.electricity.hot_water.energy_consumption", 
+                   "in.sqft", 
+                   "Dry_Bulb_Temperature")  # Replace with correct column name if needed
+
+data_selected <- data[, selected_vars]
+
+# Split data into train and test sets
+set.seed(123)
+trainIndex <- createDataPartition(data_selected$Total_Energy_Usage, p = 0.8, 
+                                  list = FALSE, 
+                                  times = 1)
+data_train <- data_selected[trainIndex, ]
+data_test <- data_selected[-trainIndex, ]
+
+# Train a decision tree model
+decision_tree <- rpart(Total_Energy_Usage ~ ., data = data_train, method = "anova")
+
+# Visualize the decision tree
+rpart.plot(decision_tree, type = 2, extra = 101, fallen.leaves = TRUE, cex = 0.8)
+
+# Predictions and RMSE for Decision Tree
+predictions_tree <- predict(decision_tree, data_test)
+rmse_tree <- sqrt(mean((predictions_tree - data_test$Total_Energy_Usage)^2))
+print(paste("Decision Tree RMSE:", rmse_tree))
+
+# R-squared for Decision Tree
+actual_values <- data_test$Total_Energy_Usage
+ss_total <- sum((actual_values - mean(actual_values))^2)  # Total Sum of Squares
+ss_residual_tree <- sum((actual_values - predictions_tree)^2) # Residual Sum of Squares
+r_squared_tree <- 1 - (ss_residual_tree / ss_total)
+print(paste("R-squared for Decision Tree:", r_squared_tree))
+```
+
+```{r}
+write.csv(data, "shiny_Data.csv", row.names = FALSE)
+```
+
+```{r}
+
+# Step 1: Increase the temperature in the dataset by 5 degrees
+new_weather_data <- data %>%
+  mutate(Dry_Bulb_Temperature = Dry_Bulb_Temperature + 5)
+
+# Step 2: Recalculate energy usage predictions using the updated dataset
+
+# Select the required variables from the modified dataset
+selected_vars <- c("out.electricity.cooling.energy_consumption", 
+                   "out.electricity.cooling_fans_pumps.energy_consumption", 
+                   "out.electricity.plug_loads.energy_consumption", 
+                   "out.electricity.lighting_interior.energy_consumption", 
+                   "out.electricity.hot_water.energy_consumption", 
+                   "in.sqft", 
+                   "Dry_Bulb_Temperature") # Adjust based on your dataset
+
+new_weather_data <- new_weather_data[, selected_vars]
+
+# Predict future energy usage using the best model 
+future_energy_predictions <- predict(linear_model, new_weather_data)
+
+# Step 4: Evaluate and visualize peak energy demand
+# Add predictions to the modified dataset
+new_weather_data$Predicted_Energy_Usage <- future_energy_predictions
+
+# Visualization 1: Distribution of Predicted Energy Usage
+ggplot(new_weather_data, aes(x = Predicted_Energy_Usage)) +
+  geom_histogram(binwidth = 50, fill = "blue", color = "black", alpha = 0.7) +
+  labs(title = "Predicted Energy Usage Distribution (+5°C)", 
+       x = "Predicted Energy Usage (kWh)", 
+       y = "Frequency") +
+  theme_minimal()
+
+future_energy_summary <- data.frame(
+  Predicted_Total_Energy = future_energy_predictions,
+  Original_Temperature = data$Dry_Bulb_Temperature,
+  Adjusted_Temperature = new_weather_data$Dry_Bulb_Temperature
+)
+
+ggplot(future_energy_summary, aes(x = Adjusted_Temperature, y = Predicted_Total_Energy)) +
+  geom_point(color = "darkgreen", alpha = 0.5) +
+  geom_smooth(method = "lm", color = "red", se = FALSE) +
+  labs(title = "Predicted Energy Usage vs Adjusted Temperature (+5°C)", 
+       x = "Adjusted Temperature (°C)", 
+       y = "Predicted Total Energy Usage (kWh)") +
+  theme_minimal()
+
+
+```
